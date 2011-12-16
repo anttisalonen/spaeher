@@ -3,19 +3,8 @@
 import time
 
 import game
+import ai
 import fromClient, toClient
-
-class AI:
-    def __init__(self, ownTeamID):
-        self.ownTeamID = ownTeamID
-
-    def decide(self, gameState):
-        if gameState.canMoveForward():
-            print self.ownTeamID, "moving"
-            return fromClient.MoveForwardCommand()
-        else:
-            print self.ownTeamID, "turning"
-            return fromClient.TurnCommand(True)
 
 class Client:
     def __init__(self, name, server, configurator):
@@ -27,7 +16,7 @@ class Client:
         self.isConfigurator = configurator
         self.ownTeamID = 0 if configurator else 1
         self.clientid = self.ownTeamID
-        self.ai = AI(self.ownTeamID)
+        self.ai = ai.AI(self.ownTeamID)
 
     def sendMessage(self, message):
         # TODO
