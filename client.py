@@ -5,6 +5,18 @@ import time
 import game
 import fromClient, toClient
 
+class AI:
+    def __init__(self, ownTeamID):
+        self.ownTeamID = ownTeamID
+
+    def decide(self, gameState):
+        if gameState.canMoveForward():
+            print self.ownTeamID, "moving"
+            return fromClient.MoveForwardCommand()
+        else:
+            print self.ownTeamID, "turning"
+            return fromClient.TurnCommand(True)
+
 class Client:
     def __init__(self, name, server, configurator):
         self.connected = True
@@ -15,6 +27,7 @@ class Client:
         self.isConfigurator = configurator
         self.ownTeamID = 0 if configurator else 1
         self.clientid = self.ownTeamID
+        self.ai = AI(self.ownTeamID)
 
     def sendMessage(self, message):
         # TODO
@@ -38,11 +51,7 @@ class Client:
 
     def play(self):
         while self.gameState.activeTeamID == self.ownTeamID:
-            if self.gameState.canMoveForward():
-                print self.ownTeamID, "moving"
-                self.server.handleClientData(self, fromClient.MoveForwardCommand())
-            else:
-                print self.ownTeamID, "turning"
-                self.server.handleClientData(self, fromClient.TurnCommand(True))
+            msg = self.ai.decide(self.gameState)
+            self.server.handleClientData(self, msg)
             time.sleep(0.1)
 
