@@ -39,7 +39,7 @@ class GameConfiguration:
         self.bfwidth = bfwidth
         self.bfheight = bfheight
         self.numTeams = 2
-        self.numSoldiers = [4] * self.numTeams
+        self.numSoldiers = [1] * self.numTeams
 
     def getInitialSoldierPosition(self, teamID, soldierID):
         if teamID == 0:
@@ -55,8 +55,8 @@ class Team:
 
     def generateSoldiers(self, numsoldiers, getpos):
         for x in xrange(numsoldiers):
-            position = getpos(self.teamID, x + 1)
-            self.soldiers.append(Soldier(x, self.teamID, position))
+            position = getpos(self.teamID, x)
+            self.soldiers.append(Soldier(self.teamID, x, position))
 
     def dead(self):
         return all([soldier.dead() for soldier in self.soldiers])
@@ -106,13 +106,8 @@ class Battlefield:
 
     def visibleFrom(self, pos1, pos2):
         # TODO: angle
-        xdiff = abs(pos1.x - pos2.x)
-        ydiff = abs(pos1.y - pos2.y)
-        if xdiff < 20:
-            return False
-        if ydiff < 20:
-            return False
-        return math.sqrt(ydiff * ydiff + xdiff * xdiff) < 20
+        vl = vectorLength(subVectors(pos1, pos2))
+        return vl < 20
 
 class Direction:
     N = 0

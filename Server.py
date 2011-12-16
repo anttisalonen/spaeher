@@ -28,6 +28,7 @@ class Game:
         print "Client quit"
 
     def endTurn(self):
+        print "End turn"
         self.gameState.nextTurn()
         self.checkGameOver()
         self.updateClientTurnState()
@@ -56,9 +57,14 @@ class Game:
     def updateClientSoldierState(self):
         soldier = self.gameState.getActiveSoldier()
         for team in self.gameState.teams.values():
-            for soldier2 in team.soldiers:
-                if team.teamID == self.gameState.activeTeamID or self.gameState.battlefield.visibleFrom(soldier2.position, soldier.position):
-                    self.server.sendData(team.teamID, toClient.SoldierData(soldier))
+            if team.teamID == self.gameState.activeTeamID:
+                self.server.sendData(team.teamID, toClient.SoldierData(soldier))
+            else:
+                for soldier2 in team.soldiers:
+                    if self.gameState.battlefield.visibleFrom(soldier2.position, soldier.position):
+                        self.server.sendData(team.teamID, toClient.SoldierData(soldier))
+                    if self.gameState.battlefield.visibleFrom(soldier.position, soldier2.position):
+                        self.server.sendData(team.teamID, toClient.SoldierData(soldier2))
 
     def updateClientTurnState(self):
         self.server.broadcast(toClient.TurnData(self.gameState.activeTeamID, self.gameState.activeSoldierID))
