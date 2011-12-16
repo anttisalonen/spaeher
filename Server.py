@@ -28,11 +28,7 @@ class Game:
         print "Client quit"
 
     def endTurn(self):
-        self.gameState.activeTeamID += 1
-        if self.gameState.activeTeamID >= len(self.gameState.teams):
-            self.gameState.activeTeamID = 0
-        self.gameState.aps = 100
-        self.gameState.activeSoldierID = self.gameState.teams[self.gameState.activeTeamID].soldiers[0].soldierID
+        self.gameState.nextTurn()
         self.checkGameOver()
         self.updateClientTurnState()
 
@@ -71,8 +67,7 @@ class Game:
         for team in self.gameState.teams.values():
             if team.dead():
                 self.server.setMode(Lobby(self.server))
-                return True
-        return False
+                return
 
 class Lobby:
     def __init__(self, server):

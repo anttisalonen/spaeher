@@ -8,11 +8,20 @@ import message
 class GameState:
     def __init__(self):
         self.teams = {}
+        self.turnNumber = 0
 
     def setSoldier(self, soldier):
         if soldier.teamID not in self.teams:
             self.teams[soldier.teamID] = Team(soldier.teamID)
         self.teams[soldier.teamID].soldiers[soldier.soldierID] = soldier
+
+    def nextTurn(self):
+        self.activeTeamID += 1
+        if self.activeTeamID >= len(self.teams):
+            self.activeTeamID = 0
+        self.aps = 100
+        self.activeSoldierID = self.teams[self.activeTeamID].soldiers[0].soldierID
+        self.turnNumber += 1
 
     def canMoveForward(self):
         activeSoldier = self.getActiveSoldier()
@@ -68,8 +77,17 @@ class Position:
     def __str__(self):
         return str((self.x, self.y))
 
+    def __eq__(self, p):
+        return self.x == p.x and self.y == p.y
+
 def addVectors(v1, v2):
     return Position(v1.x + v2.x, v1.y + v2.y)
+
+def subVectors(v1, v2):
+    return Position(v1.x - v2.x, v1.y - v2.y)
+
+def vectorLength(v):
+    return math.sqrt(v.x * v.x + v.y * v.y)
 
 class Battlefield:
     def __init__(self, width, height):
@@ -106,6 +124,42 @@ class Direction:
     W = 6
     NW = 7
 
+def directionToVector(direction):
+    if direction == Direction.N:
+        return Position(0, 1)
+    elif direction == Direction.NE:
+        return Position(1, 1)
+    elif direction == Direction.E:
+        return Position(1, 0)
+    elif direction == Direction.SE:
+        return Position(1, -1)
+    elif direction == Direction.S:
+        return Position(0, -1)
+    elif direction == Direction.SW:
+        return Position(-1, -1)
+    elif direction == Direction.W:
+        return Position(-1, 0)
+    elif direction == Direction.NW:
+        return Position(-1, 1)
+
+def vectorToDirection(pos):
+    if pos.x == 0 and pos.y > 0:
+        return Direction.N
+    elif pos.x > 0 and pos.y > 0:
+        return Direction.NE
+    elif pos.x > 0 and pos.y == 0:
+        return Direction.E
+    elif pos.x > 0 and pos.y < 0:
+        return Direction.SE
+    elif pos.x == 0 and pos.y < 0:
+        return Direction.S
+    elif pos.x < 0 and pos.y < 0:
+        return Direction.SW
+    elif pos.x < 0 and pos.y == 0:
+        return Direction.W
+    else:
+        return Direction.NW
+
 class Soldier:
     def __init__(self, teamID, soldierID, pos):
         self.teamID = teamID
@@ -119,22 +173,7 @@ class Soldier:
         return self.hps <= 0
 
     def updateMovementVector(self):
-        if self.direction == Direction.N:
-            self.movementVector = Position(0, 1)
-        elif self.direction == Direction.NE:
-            self.movementVector = Position(1, 1)
-        elif self.direction == Direction.E:
-            self.movementVector = Position(1, 0)
-        elif self.direction == Direction.SE:
-            self.movementVector = Position(1, -1)
-        elif self.direction == Direction.S:
-            self.movementVector = Position(0, -1)
-        elif self.direction == Direction.SW:
-            self.movementVector = Position(-1, -1)
-        elif self.direction == Direction.W:
-            self.movementVector = Position(-1, 0)
-        elif self.direction == Direction.NW:
-            self.movementVector = Position(-1, 1)
+        self.movementVector = directionToVector(self.direction)
 
     def turn(self, toright):
         if toright:
