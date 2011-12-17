@@ -13,7 +13,7 @@ class AI:
 
     def updateTasks(self, gameState):
         print "AI updating tasks"
-        self.tasks.append(ExploreTask(gameState))
+        self.tasks.append(ExploreTask(gameState, self.ownTeamID))
 
     def decide(self, gameState):
         msg = None
@@ -25,8 +25,36 @@ class AI:
                 self.tasks.popleft()
         return msg
 
+    def handleSoldierData(self, gameState, soldier):
+        if soldier.teamID != self.ownTeamID and (len(self.tasks) == 0 or isinstance(self.tasks[0], ExploreTask)):
+            print self.ownTeamID, "hunting for a soldier on", soldier.position
+            self.tasks.appendleft(HuntTask(gameState, soldier, self.ownTeamID))
+
+class HuntTask:
+    def __init__(self, gameState, soldier, ownTeamID):
+        self.target = soldier
+        self.ownTeamID = ownTeamID
+
+    def execute(self, gameState):
+        print self.ownTeamID, "Executing hunt task"
+        if self.target.teamID in gameState.teams and self.target.soldierID in gameState.teams[self.target.teamID].soldiers:
+            self.target = gameState.teams[self.target.teamID].soldiers[self.target.soldierID]
+        tgtvec = game.subVectors(self.target.position, gameState.getActiveSoldier().position)
+        if game.vectorLength(tgtvec) < 10:
+            sold = gameState.soldierOn(self.target.position)
+            if sold and sold.teamID != self.ownTeamID:
+                print "shooting"
+                return fromClient.ShootCommand(self.target.position)
+            else:
+                print "giving up on hunt, no idea where he went"
+                return None
+        else:
+            print "hunting from", gameState.getActiveSoldier().position, "to", self.target.position
+            return gotoCommand(tgtvec, gameState)
+
 class ExploreTask:
-    def __init__(self, gameState):
+    def __init__(self, gameState, ownTeamID):
+        self.ownTeamID = ownTeamID
         self.exploreTargets = deque()
         for i in xrange(0, gameState.battlefield.width - 1, 5):
             for j in xrange(0, gameState.battlefield.height - 1, 5):
@@ -41,19 +69,21 @@ class ExploreTask:
             self.exploreTargets.popleft()
             if len(self.exploreTargets) == 0:
                 return None
-        nextdir = game.vectorToDirection(tgtvec)
-        mydir = gameState.getActiveSoldier().direction 
-        if mydir == nextdir:
-            print "moving to", self.exploreTargets[0], "from", gameState.getActiveSoldier().position
-            assert gameState.canMoveForward(), "AI: walking to a wall"
-            return fromClient.MoveForwardCommand()
+
+        print self.ownTeamID, "moving to", self.exploreTargets[0], "from", gameState.getActiveSoldier().position
+        return gotoCommand(tgtvec, gameState)
+
+def gotoCommand(tgtvec, gameState):
+    nextdir = game.vectorToDirection(tgtvec)
+    mydir = gameState.getActiveSoldier().direction 
+    if mydir == nextdir:
+        assert gameState.canMoveForward(), "AI: walking to a wall"
+        return fromClient.MoveForwardCommand()
+    else:
+        if mydir < nextdir:
+            return fromClient.TurnCommand(True)
         else:
-            if mydir < nextdir:
-                print "turning right"
-                return fromClient.TurnCommand(True)
-            else:
-                print "turning left"
-                return fromClient.TurnCommand(False)
+            return fromClient.TurnCommand(False)
 
 def getPath(p1, p2):
     # TODO: replace with bresenham, or something...

@@ -15,6 +15,15 @@ class GameState:
             self.teams[soldier.teamID] = Team(soldier.teamID)
         self.teams[soldier.teamID].soldiers[soldier.soldierID] = soldier
 
+    def removeSoldier(self, teamID, soldierID):
+        if teamID in self.teams:
+            if soldierID in self.teams[teamID].soldiers:
+                del self.teams[teamID].soldiers[soldierID]
+
+    def killSoldier(self, soldier):
+        if soldier.teamID in self.teams and soldier.soldierID in self.teams[soldier.teamID].soldiers:
+            self.teams[soldier.teamID].soldiers[soldier.soldierID].hps = 0
+
     def nextTurn(self):
         self.activeTeamID += 1
         if self.activeTeamID >= len(self.teams):
@@ -34,6 +43,13 @@ class GameState:
     def getActiveSoldier(self):
         return self.teams[self.activeTeamID].soldiers[self.activeSoldierID]
 
+    def soldierOn(self, pos):
+        for t in self.teams.values():
+            for s in t.soldiers.values():
+                if s.position == pos:
+                    return s
+        return None
+
 class GameConfiguration:
     def __init__(self, bfwidth, bfheight):
         self.bfwidth = bfwidth
@@ -51,15 +67,15 @@ class GameConfiguration:
 class Team:
     def __init__(self, teamID):
         self.teamID = teamID
-        self.soldiers = []
+        self.soldiers = {}
 
     def generateSoldiers(self, numsoldiers, getpos):
         for x in xrange(numsoldiers):
             position = getpos(self.teamID, x)
-            self.soldiers.append(Soldier(self.teamID, x, position))
+            self.soldiers[x] = Soldier(self.teamID, x, position)
 
     def dead(self):
-        return all([soldier.dead() for soldier in self.soldiers])
+        return all([soldier.dead() for soldier in self.soldiers.values()])
 
 class Tile:
     grass = 0

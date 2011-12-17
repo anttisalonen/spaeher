@@ -12,9 +12,13 @@ def serve(server):
     cl2.init()
     cl1.startGame()
     assert hasattr(cl2, "gameState"), "client has no game state"
-    while server.gameOn():
+    while True:
         cl1.play()
+        if not server.gameOn():
+            break
         cl2.play()
+        if not server.gameOn():
+            break
     cl1.quitGame()
     cl2.quitGame()
 

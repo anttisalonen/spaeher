@@ -22,6 +22,15 @@ class SoldierData:
 
     def handleMessageForClient(self, client):
         client.gameState.setSoldier(self.soldier)
+        client.ai.handleSoldierData(client.gameState, self.soldier)
+
+class RemoveSoldierData:
+    def __init__(self, teamid, soldierid):
+        self.teamID = teamid
+        self.soldierID = soldierid
+
+    def handleMessageForClient(self, client):
+        client.gameState.removeSoldier(self.teamID, self.soldierID)
 
 class SoldierAPData:
     def __init__(self, aps):

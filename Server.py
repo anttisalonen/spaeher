@@ -30,23 +30,32 @@ class Game:
     def endTurn(self):
         print "End turn"
         self.gameState.nextTurn()
-        self.checkGameOver()
+        if self.checkGameOver():
+            self.server.setMode(Lobby(self.server))
         self.updateClientTurnState()
 
     def moveForward(self):
         newpos = self.gameState.canMoveForward()
         if newpos:
+            self.decrementAPs(10)
             self.gameState.getActiveSoldier().position = newpos
-            self.updateClientSoldierState()
-            self.decrementAPs()
+            self.updateClientSoldierState(self.gameState.getActiveSoldier())
 
     def turn(self, toright):
         if self.gameState.aps > 0:
             self.gameState.getActiveSoldier().turn(toright)
-            self.updateClientSoldierState()
+            self.updateClientSoldierState(self.gameState.getActiveSoldier())
 
-    def decrementAPs(self):
-        self.gameState.aps -= 10
+    def killSoldier(self, soldier):
+        self.gameState.killSoldier(soldier)
+        self.updateClientSoldierState(soldier)
+        print "Soldier from team", soldier.teamID, "killed"
+        if self.checkGameOver():
+            # force end of turn
+            self.endTurn()
+
+    def decrementAPs(self, num):
+        self.gameState.aps -= num
         self.updateClientAPState()
         if self.gameState.aps <= 0:
             self.endTurn()
@@ -54,17 +63,22 @@ class Game:
     def updateClientAPState(self):
         self.server.broadcast(toClient.SoldierAPData(self.gameState.aps))
 
-    def updateClientSoldierState(self):
-        soldier = self.gameState.getActiveSoldier()
+    def updateClientSoldierState(self, soldier):
         for team in self.gameState.teams.values():
-            if team.teamID == self.gameState.activeTeamID:
+            if team.teamID == soldier.teamID:
                 self.server.sendData(team.teamID, toClient.SoldierData(soldier))
             else:
-                for soldier2 in team.soldiers:
+                visibleToTeam = False
+                for soldier2 in team.soldiers.values():
                     if self.gameState.battlefield.visibleFrom(soldier2.position, soldier.position):
+                        print soldier2.teamID, "soldier visible"
                         self.server.sendData(team.teamID, toClient.SoldierData(soldier))
+                        visibleToTeam = True
                     if self.gameState.battlefield.visibleFrom(soldier.position, soldier2.position):
+                        print soldier.teamID, "soldier visible"
                         self.server.sendData(team.teamID, toClient.SoldierData(soldier2))
+                if not visibleToTeam:
+                    self.server.sendData(team.teamID, toClient.RemoveSoldierData(soldier.teamID, soldier.soldierID))
 
     def updateClientTurnState(self):
         self.server.broadcast(toClient.TurnData(self.gameState.activeTeamID, self.gameState.activeSoldierID))
@@ -72,8 +86,8 @@ class Game:
     def checkGameOver(self):
         for team in self.gameState.teams.values():
             if team.dead():
-                self.server.setMode(Lobby(self.server))
-                return
+                return True
+        return False
 
 class Lobby:
     def __init__(self, server):

@@ -73,3 +73,14 @@ class TurnCommand:
     def handleGameEvent(self, g, client):
         if g.server.clientControls(client.clientid, g.gameState.activeTeamID):
             g.turn(self.toright)
+
+class ShootCommand:
+    def __init__(self, pos):
+        self.pos = pos
+
+    def handleGameEvent(self, g, client):
+        if g.server.clientControls(client.clientid, g.gameState.activeTeamID):
+            g.decrementAPs(20)
+            sold = g.gameState.soldierOn(self.pos)
+            if sold and sold.hps > 0:
+                g.killSoldier(sold)
