@@ -43,13 +43,13 @@ class HuntTask:
         if game.vectorLength(tgtvec) < 10:
             sold = gameState.soldierOn(self.target.position)
             if sold and sold.teamID != self.ownTeamID:
-                print "shooting"
+                print self.ownTeamID, "shooting"
                 return fromClient.ShootCommand(self.target.position)
             else:
-                print "giving up on hunt, no idea where he went"
+                print self.ownTeamID, "giving up on hunt, no idea where he went"
                 return None
         else:
-            print "hunting from", gameState.getActiveSoldier().position, "to", self.target.position
+            print self.ownTeamID, "hunting from", gameState.getActiveSoldier().position, "to", self.target.position
             return gotoCommand(tgtvec, gameState)
 
 class ExploreTask:
