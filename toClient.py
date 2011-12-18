@@ -37,13 +37,15 @@ class SoldierAPData:
         self.aps = aps
 
     def handleMessageForClient(self, client):
-        client.aps = self.aps
+        client.gameState.aps = self.aps
 
 class TurnData:
-    def __init__(self, activeteamid, activesoldierid):
+    def __init__(self, activeteamid, activesoldierid, aps):
         self.activeteamid = activeteamid
         self.activesoldierid = activesoldierid
+        self.aps = aps
 
     def handleMessageForClient(self, client):
         client.gameState.activeTeamID = self.activeteamid
         client.gameState.activeSoldierID = self.activesoldierid
+        client.gameState.aps = self.aps

@@ -16,6 +16,8 @@ class AI:
         self.tasks.append(ExploreTask(gameState, self.ownTeamID))
 
     def decide(self, gameState):
+        if gameState.aps < 10:
+            return fromClient.EndOfTurnCommand()
         msg = None
         while not msg:
             if len(self.tasks) == 0:
@@ -26,21 +28,34 @@ class AI:
         return msg
 
     def handleSoldierData(self, gameState, soldier):
-        if soldier.teamID != self.ownTeamID and (len(self.tasks) == 0 or isinstance(self.tasks[0], ExploreTask)):
-            print self.ownTeamID, "hunting for a soldier on", soldier.position
-            self.tasks.appendleft(HuntTask(gameState, soldier, self.ownTeamID))
+        if soldier.teamID != self.ownTeamID:
+            if len(self.tasks) == 0 or isinstance(self.tasks[0], ExploreTask):
+                print self.ownTeamID, "hunting for a soldier on", soldier.position
+                self.tasks.appendleft(HuntTask(gameState, soldier, self.ownTeamID))
+            elif isinstance(self.tasks[0], HuntTask) and self.tasks[0].target.soldierID == soldier.soldierID and \
+                    self.tasks[0].target.teamID == soldier.teamID and self.tasks[0].target.position != soldier.position:
+                print self.ownTeamID, "updating hunt position for a soldier on", soldier.position
+                self.tasks[0] = HuntTask(gameState, soldier, self.ownTeamID)
 
 class HuntTask:
     def __init__(self, gameState, soldier, ownTeamID):
         self.target = soldier
         self.ownTeamID = ownTeamID
+        self.path = None
 
     def execute(self, gameState):
-        print self.ownTeamID, "Executing hunt task"
-        if self.target.teamID in gameState.teams and self.target.soldierID in gameState.teams[self.target.teamID].soldiers:
-            self.target = gameState.teams[self.target.teamID].soldiers[self.target.soldierID]
-        tgtvec = game.subVectors(self.target.position, gameState.getActiveSoldier().position)
-        if game.vectorLength(tgtvec) < 10:
+        if not self.path:
+            self.path = battlefield_bfs(gameState.battlefield, gameState.getActiveSoldier().position, self.target.position)
+        if not self.path:
+            return None
+        if gameState.getActiveSoldier().position == self.path[0]:
+            self.path.popleft()
+            if not self.path:
+                self.path = battlefield_bfs(gameState.battlefield, gameState.getActiveSoldier().position, self.target.position)
+            if not self.path:
+                return None
+        tgtvec = game.subVectors(self.path[0], gameState.getActiveSoldier().position)
+        if game.vectorLength(game.subVectors(self.target.position, gameState.getActiveSoldier().position)) < 10:
             sold = gameState.soldierOn(self.target.position)
             if sold and sold.teamID != self.ownTeamID:
                 print self.ownTeamID, "shooting"
@@ -49,34 +64,57 @@ class HuntTask:
                 print self.ownTeamID, "giving up on hunt, no idea where he went"
                 return None
         else:
-            print self.ownTeamID, "hunting from", gameState.getActiveSoldier().position, "to", self.target.position
-            return gotoCommand(tgtvec, gameState)
+            return gotoCommand(str(self.ownTeamID) + ": hunting from " + str(self.path[0]) + " to " + str(self.target.position), tgtvec, gameState)
+
+def battlefield_bfs(bf, frompos, topos):
+    return bfs(frompos, topos, lambda p: getBattlefieldNeighbours(bf, p))
 
 class ExploreTask:
     def __init__(self, gameState, ownTeamID):
         self.ownTeamID = ownTeamID
+        self.path = None
         self.exploreTargets = deque()
         for i in xrange(0, gameState.battlefield.width - 1, 5):
             for j in xrange(0, gameState.battlefield.height - 1, 5):
-                self.exploreTargets.append(game.Position(i, j))
+                pos = game.Position(i, j)
+                if gameState.battlefield.spotFree(pos):
+                    self.exploreTargets.append(pos)
 
     def execute(self, gameState):
         if len(self.exploreTargets) == 0:
             return None
 
-        tgtvec = game.subVectors(self.exploreTargets[0], gameState.getActiveSoldier().position)
-        if game.vectorLength(tgtvec) < 5:
-            self.exploreTargets.popleft()
-            if len(self.exploreTargets) == 0:
+        if self.path and gameState.getActiveSoldier().position == self.path[0]:
+            self.path.popleft()
+
+        while True:
+            if self.path and gameState.battlefield.spotFree(self.path[0]):
+                tgtvec = game.subVectors(self.path[0], gameState.getActiveSoldier().position)
+                break
+            while self.exploreTargets and \
+                    game.vectorLength(game.subVectors(gameState.getActiveSoldier().position, self.exploreTargets[0])) < 2:
+                self.exploreTargets.popleft()
+            if not self.exploreTargets:
                 return None
+            self.path = battlefield_bfs(gameState.battlefield, gameState.getActiveSoldier().position, self.exploreTargets[0])
+            if not self.path:
+                self.exploreTargets.popleft()
+                self.path = None
+            else:
+                self.path.popleft()
 
-        print self.ownTeamID, "moving to", self.exploreTargets[0], "from", gameState.getActiveSoldier().position
-        return gotoCommand(tgtvec, gameState)
+        return gotoCommand(str(self.ownTeamID) + ": exploring from " + str(gameState.getActiveSoldier().position) + " for " + str(self.exploreTargets[0]), tgtvec, gameState)
 
-def gotoCommand(tgtvec, gameState):
+def getBattlefieldNeighbours(battlefield, pos):
+    for n in game.gridneighbours(pos):
+        if battlefield.spotFree(n):
+            yield n
+
+def gotoCommand(debstr, tgtvec, gameState):
     nextdir = game.vectorToDirection(tgtvec)
     mydir = gameState.getActiveSoldier().direction 
     if mydir == nextdir:
+        print debstr
         assert gameState.canMoveForward(), "AI: walking to a wall"
         return fromClient.MoveForwardCommand()
     else:
@@ -100,3 +138,32 @@ def getPath(p1, p2):
             pcursor.y -= 1
         path.append(deepcopy(pcursor))
     return path
+
+def bfs(frompos, topos, getneighbours):
+    openposs = deque()
+    closedposs = dict()
+    thispos = frompos
+    found = False
+    print "path from", frompos, "to", topos
+    closedposs[thispos] = None
+    while True:
+        if thispos == topos:
+            found = True
+            break
+        neighbours = getneighbours(thispos)
+        for neighbour in neighbours:
+            if neighbour not in closedposs:
+                openposs.append(neighbour)
+                closedposs[neighbour] = thispos
+        if not openposs:
+            break
+        else:
+            thispos = openposs.popleft()
+    if not found:
+        return None
+    else:
+        path = deque()
+        while thispos:
+            path.appendleft(thispos)
+            thispos = closedposs[thispos]
+        return path

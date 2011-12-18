@@ -1,14 +1,18 @@
 #/usr/bin/env python2
 
 import math
+from collections import namedtuple
 
 import toClient
 import message
 
 class GameState:
-    def __init__(self):
+    def __init__(self, startaps = 0):
         self.teams = {}
         self.turnNumber = 0
+        self.activeTeamID = 0
+        self.startaps = startaps
+        self.aps = self.startaps
 
     def setSoldier(self, soldier):
         if soldier.teamID not in self.teams:
@@ -28,7 +32,7 @@ class GameState:
         self.activeTeamID += 1
         if self.activeTeamID >= len(self.teams):
             self.activeTeamID = 0
-        self.aps = 100
+        self.aps = self.startaps
         self.activeSoldierID = self.teams[self.activeTeamID].soldiers[0].soldierID
         self.turnNumber += 1
 
@@ -49,6 +53,12 @@ class GameState:
                 if s.position == pos:
                     return s
         return None
+
+    def getSoldier(self, teamid, soldierid):
+        if teamid in self.teams and soldierid in self.teams[teamid].soldiers:
+            return self.teams[teamid].soldiers[soldierid]
+        else:
+            return None
 
 class GameConfiguration:
     def __init__(self, bfwidth, bfheight):
@@ -81,20 +91,12 @@ class Tile:
     grass = 0
     tree = 1
 
-class Position:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
+Position = namedtuple('Position', 'x y')
 
-    def add(self, vec):
-        self.x += vec.x
-        self.y += vec.y
-
-    def __str__(self):
-        return str((self.x, self.y))
-
-    def __eq__(self, p):
-        return self.x == p.x and self.y == p.y
+def gridneighbours(pos):
+    for i in [pos.x + d for d in [-1, 0, 1]]:
+        for j in [pos.y + d for d in [-1, 0, 1]]:
+            yield(Position(i, j))
 
 def addVectors(v1, v2):
     return Position(v1.x + v2.x, v1.y + v2.y)
@@ -118,7 +120,7 @@ class Battlefield:
     def spotFree(self, pos):
         if pos.x < 0 or pos.y < 0 or pos.x >= self.width or pos.y >= self.height:
             return False
-        return self.array[pos.x][pos.y] == 0
+        return self.array[pos.x][pos.y] == Tile.grass
 
     def visibleFrom(self, pos1, pos2):
         # TODO: angle

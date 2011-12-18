@@ -42,5 +42,4 @@ class Client:
         while self.gameState.activeTeamID == self.ownTeamID:
             msg = self.ai.decide(self.gameState)
             self.server.handleClientData(self, msg)
-            time.sleep(0.1)
 

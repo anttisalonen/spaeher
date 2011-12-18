@@ -3,6 +3,7 @@
 import game
 import toClient
 import Server
+import creation
 
 class ServerConfiguration:
     def __init__(self, config):
@@ -37,16 +38,7 @@ class StartGame:
 
     def handleLobbyEvent(self, lobby, client):
         if lobby.server.config:
-            g = game.GameState()
-            g.aps = 100
-            getpos = lambda x, y: lobby.server.config.getInitialSoldierPosition(x, y)
-            for x in xrange(lobby.server.config.numTeams):
-                t = game.Team(x)
-                t.generateSoldiers(lobby.server.config.numSoldiers[x], getpos)
-                g.teams[t.teamID] = t
-            g.activeTeamID = 0
-            g.activeSoldierID = g.teams[g.activeTeamID].soldiers[0].soldierID
-            g.battlefield = game.Battlefield(lobby.server.config.bfwidth, lobby.server.config.bfheight)
+            g = creation.generateGameState(lobby.server.config)
             lobby.server.setMode(Server.Game(lobby.server, g))
             lobby.server.broadcast(toClient.InitialGameData(g))
 
@@ -82,5 +74,5 @@ class ShootCommand:
         if g.server.clientControls(client.clientid, g.gameState.activeTeamID):
             g.decrementAPs(20)
             sold = g.gameState.soldierOn(self.pos)
-            if sold and sold.hps > 0:
+            if sold and sold.hps > 0 and game.vectorLength(game.subVectors(sold.position, g.gameState.getActiveSoldier().position)) < 10:
                 g.killSoldier(sold)
