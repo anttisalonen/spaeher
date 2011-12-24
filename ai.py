@@ -9,41 +9,55 @@ import fromClient
 class AI:
     def __init__(self, ownTeamID):
         self.ownTeamID = ownTeamID
-        self.tasks = deque()
+        self.tasks = dict()
 
     def updateTasks(self, gameState):
-        print "AI updating tasks"
-        self.tasks.append(ExploreTask(gameState, self.ownTeamID))
+        print self.ownTeamID, gameState.activeSoldierID, "AI updating tasks"
+        self.tasks[gameState.activeSoldierID] = deque()
+        self.tasks[gameState.activeSoldierID].append(ExploreTask(gameState, self.ownTeamID))
 
     def decide(self, gameState):
         if gameState.aps < 10:
             return fromClient.EndOfTurnCommand()
         msg = None
         while not msg:
-            if len(self.tasks) == 0:
+            if self.currentSoldierIdle(gameState):
                 self.updateTasks(gameState)
-            msg = self.tasks[0].execute(gameState)
+            msg = self.tasks[gameState.activeSoldierID][0].execute(gameState)
             if not msg:
-                self.tasks.popleft()
+                self.tasks[gameState.activeSoldierID].popleft()
         return msg
+
+    def currentSoldierIdle(self, gameState):
+        return self.soldierIdle(gameState.activeSoldierID)
+
+    def soldierIdle(self, soldierid):
+        return soldierid not in self.tasks or len(self.tasks[soldierid]) == 0
 
     def handleSoldierData(self, gameState, soldier):
         if soldier.teamID != self.ownTeamID:
-            if len(self.tasks) == 0 or isinstance(self.tasks[0], ExploreTask):
-                print self.ownTeamID, "hunting for a soldier on", soldier.position
-                self.tasks.appendleft(HuntTask(gameState, soldier, self.ownTeamID))
-            elif isinstance(self.tasks[0], HuntTask) and self.tasks[0].target.soldierID == soldier.soldierID and \
-                    self.tasks[0].target.teamID == soldier.teamID and self.tasks[0].target.position != soldier.position:
-                print self.ownTeamID, "updating hunt position for a soldier on", soldier.position
-                self.tasks[0] = HuntTask(gameState, soldier, self.ownTeamID)
+            for ownsoldier in gameState.teams[self.ownTeamID].soldiers.values():
+                if self.soldierIdle(ownsoldier.soldierID) or isinstance(self.tasks[ownsoldier.soldierID][0], ExploreTask):
+                    print self.ownTeamID, ownsoldier.soldierID, "hunting for a soldier on", soldier.position
+                    self.tasks[ownsoldier.soldierID].clear()
+                    self.tasks[ownsoldier.soldierID].appendleft(HuntTask(gameState, soldier, self.ownTeamID))
+                else:
+                    t = self.tasks[ownsoldier.soldierID][0]
+                    if isinstance(t, HuntTask) and t.target.soldierID == soldier.soldierID and \
+                        t.target.teamID == soldier.teamID and t.target.position != soldier.position:
+                        print self.ownTeamID, ownsoldier.soldierID, "updating hunt position for a soldier on", soldier.position
+                        self.tasks[ownsoldier.soldierID][0] = HuntTask(gameState, soldier, self.ownTeamID)
 
 class HuntTask:
     def __init__(self, gameState, soldier, ownTeamID):
         self.target = soldier
         self.ownTeamID = ownTeamID
         self.path = None
+        self.shot = False
 
     def execute(self, gameState):
+        if self.shot:
+            return None
         if not self.path:
             self.path = battlefield_bfs(gameState.battlefield, gameState.getActiveSoldier().position, self.target.position)
         if not self.path:
@@ -58,13 +72,14 @@ class HuntTask:
         if game.vectorLength(game.subVectors(self.target.position, gameState.getActiveSoldier().position)) < 10:
             sold = gameState.soldierOn(self.target.position)
             if sold and sold.teamID != self.ownTeamID:
-                print self.ownTeamID, "shooting"
+                print self.ownTeamID, gameState.activeSoldierID, "shooting"
+                self.shot = True
                 return fromClient.ShootCommand(self.target.position)
             else:
-                print self.ownTeamID, "giving up on hunt, no idea where he went"
+                print self.ownTeamID, gameState.activeSoldierID, "giving up on hunt, no idea where he went"
                 return None
         else:
-            return gotoCommand(str(self.ownTeamID) + ": hunting from " + str(self.path[0]) + " to " + str(self.target.position), tgtvec, gameState)
+            return gotoCommand(str(self.ownTeamID) + " " + str(gameState.activeSoldierID) + ": hunting from " + str(self.path[0]) + " to " + str(self.target.position), tgtvec, gameState)
 
 def battlefield_bfs(bf, frompos, topos):
     return bfs(frompos, topos, lambda p: getBattlefieldNeighbours(bf, p))
@@ -103,7 +118,7 @@ class ExploreTask:
             else:
                 self.path.popleft()
 
-        return gotoCommand(str(self.ownTeamID) + ": exploring from " + str(gameState.getActiveSoldier().position) + " for " + str(self.exploreTargets[0]), tgtvec, gameState)
+        return gotoCommand(str(self.ownTeamID) + " " + str(gameState.activeSoldierID) + ": exploring from " + str(gameState.getActiveSoldier().position) + " for " + str(self.exploreTargets[0]), tgtvec, gameState)
 
 def getBattlefieldNeighbours(battlefield, pos):
     for n in game.gridneighbours(pos):

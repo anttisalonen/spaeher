@@ -39,7 +39,7 @@ class Client:
         self.server.handleClientExit(self)
 
     def play(self):
-        while self.gameState.activeTeamID == self.ownTeamID:
+        while self.gameState and self.gameState.activeTeamID == self.ownTeamID:
             msg = self.ai.decide(self.gameState)
             self.server.handleClientData(self, msg)
 

@@ -12,6 +12,13 @@ class Game:
     def __init__(self, server, gamestate):
         self.server = server
         self.gameState = gamestate
+        self.teamIDs = self.gameState.teams.keys()
+        self.soldierIDs = dict()
+        self.currentSoldierIDs = dict()
+        for teamid in self.teamIDs:
+            self.soldierIDs[teamid] = self.gameState.teams[teamid].soldiers.keys()
+            self.currentSoldierIDs[teamid] = 0
+        self.currentTeamIDIndex = 0
 
     def handleNewClient(self, client):
         print "Not accepting new client during play"
@@ -27,12 +34,47 @@ class Game:
     def handleClientExit(self, client):
         print "Client quit"
 
+    def incrementCurrentTeamID(self):
+        self.currentTeamIDIndex += 1
+        if self.currentTeamIDIndex >= len(self.teamIDs):
+            self.currentTeamIDIndex = 0
+
+    def incrementCurrentSoldierID(self):
+        team = self.gameState.teams[self.teamIDs[self.currentTeamIDIndex]]
+        increments = 0
+        while True:
+            self.currentSoldierIDs[team.teamID] += 1
+            increments += 1
+            if self.currentSoldierIDs[team.teamID] >= len(team.soldiers):
+                self.currentSoldierIDs[team.teamID] = 0
+            if not team.soldiers[self.currentSoldierIDs[team.teamID]].dead():
+                break
+            elif increments > len(team.soldiers):
+                raise ValueError, "Tried finding alive soldier, but they're all dead"
+
+    def updateCurrentTeamID(self):
+        self.incrementCurrentTeamID()
+        increments = 1
+        while self.gameState.teams[self.teamIDs[self.currentTeamIDIndex]].dead():
+            self.incrementCurrentTeamID()
+            increments += 1
+            if increments >= len(self.teamIDs):
+                self.currentTeamIDIndex = -1
+                return
+        self.incrementCurrentSoldierID()
+
     def endTurn(self):
         print "End turn"
-        self.gameState.nextTurn()
-        if self.checkGameOver():
+        self.updateCurrentTeamID()
+        if self.currentTeamIDIndex == -1:
+            # Game over
+            print "Game over"
+            self.sendGameOverToClients(self.gameState.activeTeamID)
             self.server.setMode(Lobby(self.server))
-        self.updateClientTurnState()
+        else:
+            newteamid = self.teamIDs[self.currentTeamIDIndex]
+            self.gameState.nextTurn(newteamid, self.currentSoldierIDs[newteamid])
+            self.updateClientTurnState()
 
     def moveForward(self):
         newpos = self.gameState.canMoveForward()
@@ -49,8 +91,6 @@ class Game:
         self.gameState.killSoldier(soldier)
         self.updateClientSoldierState(soldier)
         print "Soldier from team", soldier.teamID, "killed"
-        if self.checkGameOver():
-            self.endTurn()
 
     def decrementAPs(self, num):
         if self.gameState.aps >= num:
@@ -82,6 +122,9 @@ class Game:
 
     def updateClientTurnState(self):
         self.server.broadcast(toClient.TurnData(self.gameState.activeTeamID, self.gameState.activeSoldierID, self.gameState.aps))
+
+    def sendGameOverToClients(self, winningTeamID):
+        self.server.broadcast(toClient.GameOverData(winningTeamID))
 
     def checkGameOver(self):
         for team in self.gameState.teams.values():

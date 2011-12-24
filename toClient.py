@@ -21,8 +21,12 @@ class SoldierData:
         self.soldier = soldier
 
     def handleMessageForClient(self, client):
-        client.gameState.setSoldier(self.soldier)
-        client.ai.handleSoldierData(client.gameState, self.soldier)
+        if self.soldier.hps <= 0:
+            m = RemoveSoldierData(self.soldier.teamID, self.soldier.soldierID)
+            m.handleMessageForClient(client)
+        else:
+            client.gameState.setSoldier(self.soldier)
+            client.ai.handleSoldierData(client.gameState, self.soldier)
 
 class RemoveSoldierData:
     def __init__(self, teamid, soldierid):
@@ -49,3 +53,11 @@ class TurnData:
         client.gameState.activeTeamID = self.activeteamid
         client.gameState.activeSoldierID = self.activesoldierid
         client.gameState.aps = self.aps
+
+class GameOverData:
+    def __init__(self, winningTeamID):
+        self.winningTeamID = winningTeamID
+
+    def handleMessageForClient(self, client):
+        client.gameState = None
+        print client.name, "Game over - winning team:", self.winningTeamID

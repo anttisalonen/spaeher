@@ -28,12 +28,12 @@ class GameState:
         if soldier.teamID in self.teams and soldier.soldierID in self.teams[soldier.teamID].soldiers:
             self.teams[soldier.teamID].soldiers[soldier.soldierID].hps = 0
 
-    def nextTurn(self):
+    def nextTurn(self, newTeamID, newSoldierID):
         self.activeTeamID += 1
         if self.activeTeamID >= len(self.teams):
             self.activeTeamID = 0
         self.aps = self.startaps
-        self.activeSoldierID = self.teams[self.activeTeamID].soldiers[0].soldierID
+        self.activeSoldierID = newSoldierID
         self.turnNumber += 1
 
     def canMoveForward(self):
@@ -65,7 +65,7 @@ class GameConfiguration:
         self.bfwidth = bfwidth
         self.bfheight = bfheight
         self.numTeams = 2
-        self.numSoldiers = [1] * self.numTeams
+        self.numSoldiers = [4] * self.numTeams
 
     def getInitialSoldierPosition(self, teamID, soldierID):
         if teamID == 0:
