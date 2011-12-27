@@ -1,0 +1,107 @@
+message GreetingMessage {
+	optional string greetingmsg = 1;
+}
+
+message ChatMessage {
+	required string chatmsg = 1;
+}
+
+message ServerConfigurationMessage {
+	optional int32 bfwidth = 1;
+	optional int32 bfheight = 2;
+}
+
+message StartGameMessage {
+}
+
+message GetTeamMessage {
+	optional int32 teamnumber = 1;
+}
+
+enum Direction {
+	N = 1;
+	NE = 2;
+	E = 3;
+	SE = 4;
+	S = 5;
+	SW = 6;
+	W = 7;
+	NW = 8;
+}
+
+message Position {
+	optional int32 x = 1;
+	optional int32 y = 2;
+}
+
+message SoldierState {
+	optional int32 soldierID = 1;
+	optional int32 teamID = 2;
+	optional Position position = 3;
+	optional Direction direction = 4;
+	optional int32 hps = 5;
+}
+
+message TeamState {
+	optional int32 teamID = 1;
+	repeated SoldierState soldiers = 2;
+}
+
+message Tile {
+	optional int32 tile = 1;
+}
+
+message Battlefield {
+	optional int32 width = 1;
+	optional int32 height = 2;
+	repeated Tile tiles = 3;
+}
+
+message GameState {
+	repeated TeamState teams = 1;
+	optional int32 turnNumber = 2;
+	optional int32 activeTeamID = 3;
+	optional int32 activeSoldierID = 4;
+	optional Battlefield battlefield = 5;
+}
+
+message InitialGameDataMessage {
+	optional GameState game = 1;
+}
+
+message EndOfTurnCommand {
+}
+
+message MoveForwardCommand {
+}
+
+message TurnCommand {
+	optional bool toright = 1;
+}
+
+message ShootCommand {
+	optional Position pos = 1;
+}
+
+message TurnDataMessage {
+	optional int32 activeTeamID = 1;
+	optional int32 activeSoldierID = 2;
+	optional int32 aps = 3;
+}
+
+message SoldierDataMessage {
+	optional SoldierState soldier = 1;
+}
+
+message RemoveSoldierDataMessage {
+	optional int32 teamID = 1;
+	optional int32 soldierID = 2;
+}
+
+message SoldierAPDataMessage {
+	optional int32 aps = 1;
+}
+
+message GameOverDataMessage {
+	optional int32 winningTeamID = 1;
+}

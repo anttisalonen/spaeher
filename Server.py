@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 import os
+import socket
+import select
 
 import client
 import fromClient, toClient
@@ -23,13 +25,11 @@ class Game:
     def handleNewClient(self, client):
         print "Not accepting new client during play"
 
-    def handleClientData(self, client, data):
-        event = message.getClientData(data)
-        if event:
-            if hasattr(event, "handleGameEvent"):
-                event.handleGameEvent(self, client)
-            else:
-                print "Invalid data from client"
+    def handleClientMessage(self, client, msg):
+        if hasattr(msg, "handleGameEvent"):
+            msg.handleGameEvent(self, client)
+        else:
+            print "Invalid data from client"
 
     def handleClientExit(self, client):
         print "Client quit"
@@ -139,19 +139,15 @@ class Lobby:
     def handleNewClient(self, client):
         self.sendGreeting(client)
 
-    def handleClientData(self, client, data):
-        event = message.getClientData(data)
+    def handleClientMessage(self, client, msg):
         self.debugging = True
-        if event:
-            if self.debugging:
-                event.handleLobbyEvent(self, client)
-            else:
-                try:
-                    event.handleLobbyEvent(self, client)
-                except AttributeError:
-                    print "Unknown data from client"
+        if self.debugging:
+            msg.handleLobbyEvent(self, client)
         else:
-            print "Unknown data from client"
+            try:
+                msg.handleLobbyEvent(self, client)
+            except AttributeError:
+                print "Unknown data from client"
 
     def handleClientExit(self, client):
         print "Lobby: Client quit"
@@ -159,63 +155,51 @@ class Lobby:
     def sendGreeting(self, client):
         client.sendMessage(toClient.GreetingMessage("Hello!"))
 
-class Lock:
-    def __init__(self):
-        self.locked = False
-
-    def __enter__(self):
-        if self.locked:
-            raise AttributeError("The lock is held! What are the threading primitives in Python!")
-        self.locked = True
-
-    def __exit__(self, p1, p2, p3):
-        self.locked = False
-
 class Server:
     def __init__(self):
         self.mode = Lobby(self)
-        self.lock = Lock()
-        self.clients = []
+        self.clients = dict()
         self.config = None
-        self.teamowners = {}
+        self.teamowners = dict()
 
     def setConfiguration(self, client, config):
-        with self.lock:
-            self.config = config
+        self.config = config
 
     def setMode(self, mode):
-        with self.lock:
-            self.mode = mode
+        self.mode = mode
 
     def broadcast(self, message):
-        with self.lock:
-            for client in self.clients:
-                client.sendMessage(message)
+        for client in self.clients.values():
+            client.sendMessage(message)
 
     def sendData(self, teamID, msg):
         if teamID in self.teamowners:
             self.clients[self.teamowners[teamID]].sendMessage(msg)
 
     def setTeamOwner(self, client, teamnumber):
-        with self.lock:
-            if teamnumber not in self.teamowners or not self.teamowners[teamnumber].connected:
-                self.teamowners[teamnumber] = client.clientid
-                client.ownedTeamIDs.append(teamnumber)
+        if teamnumber not in self.teamowners:
+            self.teamowners[teamnumber] = client.clientID
+            client.ownedTeamIDs.append(teamnumber)
 
     def handleNewClient(self, client):
         self.mode.handleNewClient(client)
-        self.clients.append(client)
+        self.clients[client.clientID] = client
 
-    def handleClientData(self, client, data):
-        self.mode.handleClientData(client, data)
+    def handleClientMessage(self, client, msg):
+        self.mode.handleClientMessage(client, msg)
 
     def handleClientExit(self, client):
-        self.clients.remove(client)
+        del self.clients[client.clientID]
+        for teamID, cl in self.teamowners.items():
+            if cl == client.clientID:
+                del self.teamowners[teamID]
         self.mode.handleClientExit(client)
+        if not self.clients and not isinstance(self.mode, Lobby):
+            print "No more clients - back to lobby"
+            self.mode = Lobby(self)
 
     def gameOn(self):
-        with self.lock:
-            return isinstance(self.mode, Game)
+        return isinstance(self.mode, Game)
 
     def clientControls(self, clientid, teamID):
         return teamID in self.teamowners and clientid == self.teamowners[teamID]
@@ -225,3 +209,77 @@ class Server:
             return self.teamowners[teamID]
         else:
             return None
+
+class Sock_Server:
+    def __init__(self):
+        self.port = 32105
+        self.nextClientID = 1
+
+    class Sock_Client:
+        def __init__(self, sock, clientID):
+            self.sock = sock
+            self.clientID = clientID
+            self.ownedTeamIDs = []
+
+        def sendMessage(self, msg):
+            print "Sending to client:", msg
+            self.sock.send(message.buildPacket(msg))
+
+    def serve(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.setblocking(0)
+        self.sock.bind(('', self.port))
+        self.sock.listen(10)
+        self.clientsockets = dict()
+        self.gameserver = Server()
+        self.loop()
+
+    def loop(self):
+        def selectExcept(exceptsock):
+            print "Exception with socket", exceptsock
+            exceptsock.close()
+            if exceptsock is self.sock:
+                raise IOError
+            else:
+                self.handle_disconnecting_client(exceptsock)
+
+        def selectRead(readsock):
+            if readsock is self.sock:
+                self.do_accept()
+            else:
+                self.handle_incoming_client_data(readsock)
+
+        while True:
+            message.doSelect([self.sock] + self.clientsockets.keys(), selectRead, selectExcept)
+
+    def do_accept(self):
+        print "Accepting connection"
+        conn, addr = self.sock.accept()
+        conn.setblocking(0)
+        cl = self.Sock_Client(conn, self.nextClientID)
+        self.nextClientID += 1
+        self.clientsockets[conn] = cl
+        self.gameserver.handleNewClient(cl)
+
+    def handle_incoming_client_data(self, clientsock):
+        msgs = message.recvMessage(clientsock)
+        if not msgs:
+            self.handle_disconnecting_client(clientsock)
+        else:
+            for msg in msgs:
+                print "Incoming client message:", msg
+                self.gameserver.handleClientMessage(self.clientsockets[clientsock], msg)
+
+    def handle_disconnecting_client(self, clientsock):
+        print "Client disconnected"
+        self.gameserver.handleClientExit(self.clientsockets[clientsock])
+        del self.clientsockets[clientsock]
+
+def main():
+    sock_server = Sock_Server()
+    sock_server.serve()
+
+if __name__ == '__main__':
+    main()
+
